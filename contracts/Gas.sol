@@ -111,48 +111,14 @@ contract GasContract {
         balances[msg.sender] = intialBalance;
     }
 
-    function getPaymentHistory()
-        external
-        view
-        returns (History[] memory paymentHistory_)
+    function addToWhitelist(address _userAddrs, uint8 _tier)
+        public
+        onlyAdminOrOwner
     {
-        return paymentHistory;
-    }
-
-    function checkForAdmin(address _user) public view returns (bool admin_) {
-        bool admin = false;
-        for (uint256 ii = 0; ii < administrators.length; ii++) {
-            if (administrators[ii] == _user) {
-                admin = true;
-            }
-        }
-        return admin;
-    }
-
-    function balanceOf(address _user) public view returns (uint256 balance) {
-        return balances[_user];
-    }
-
-    //Can it be removed or replaced with a public bol variable with true value.
-    function getTradingMode() public pure returns (bool mode) {
-        return true;
-    }
-
-    function addHistory(address _updateAddress) internal {
-        History memory history;
-        history.blockNumber = block.number;
-        history.lastUpdate = block.timestamp;
-        history.updatedBy = _updateAddress;
-        paymentHistory.push(history);
-    }
-
-    function getPayments(address _user)
-        external
-        view
-        returns (Payment[] memory payments_)
-    {
-        if (_user == address(0)) revert Zero_Address_Not_Valid();
-        return payments[_user];
+        whitelist[_userAddrs] = _tier > 3 ? 3 : _tier;
+        isOddWhitelistUser[_userAddrs] = wasLastOdd;
+        wasLastOdd = wasLastOdd ? false : true;
+        emit AddedToWhitelist(_userAddrs, _tier);
     }
 
     function transfer(
@@ -179,6 +145,31 @@ contract GasContract {
         return true;
     }
 
+    function whiteTransfer(
+        address _recipient,
+        uint256 _amount,
+        ImportantStruct memory _struct
+    ) public checkIfWhiteListed(msg.sender) {
+        if (balances[msg.sender] < _amount) revert Not_Sufficent_Balance();
+
+        //@t0-validate this below condition is incorrect , please verify.
+        if (_amount <= 3) revert Amount_Not_To_Be_Bigger_Than_3();
+
+        balances[msg.sender] -= _amount;
+        balances[_recipient] += _amount;
+        balances[msg.sender] += whitelist[msg.sender];
+        balances[_recipient] -= whitelist[msg.sender];
+
+        // whiteListStruct[msg.sender] = ImportantStruct(0, 0, 0);
+        ImportantStruct storage newImportantStruct = whiteListStruct[
+            msg.sender
+        ];
+        newImportantStruct.valueA = _struct.valueA;
+        newImportantStruct.bigValue = _struct.bigValue;
+        newImportantStruct.valueB = _struct.valueB;
+        emit WhiteListTransfer(_recipient);
+    }
+
     function updatePayment(
         address _user,
         uint256 _ID,
@@ -188,7 +179,6 @@ contract GasContract {
         if (_ID <= 0) revert ID_Not_Greater_Than_Zero();
         if (_amount <= 0) revert Amount_Not_Greater_Than_Zero();
         if (_user == address(0)) revert Zero_Address_Not_Valid();
-        //@to-do check if msg.sender affect the gas .
 
         //payments memory _payment;
         for (uint256 ii = 0; ii < payments[_user].length; ii++) {
@@ -208,39 +198,47 @@ contract GasContract {
         }
     }
 
-    function addToWhitelist(address _userAddrs, uint8 _tier)
-        public
-        onlyAdminOrOwner
-    {
-        whitelist[_userAddrs] = _tier > 3 ? 3 : _tier;
-        isOddWhitelistUser[_userAddrs] = wasLastOdd;
-        wasLastOdd = wasLastOdd ? false : true;
-        emit AddedToWhitelist(_userAddrs, _tier);
+    function addHistory(address _updateAddress) internal {
+        History memory history;
+        history.blockNumber = block.number;
+        history.lastUpdate = block.timestamp;
+        history.updatedBy = _updateAddress;
+        paymentHistory.push(history);
     }
 
-    function whiteTransfer(
-        address _recipient,
-        uint256 _amount,
-        ImportantStruct memory _struct
-    ) public checkIfWhiteListed(msg.sender) {
-        //@to-do validate if msg.sneder can be used for gas optimization
-        if (balances[msg.sender] < _amount) revert Not_Sufficent_Balance();
+    function getPaymentHistory()
+        external
+        view
+        returns (History[] memory paymentHistory_)
+    {
+        return paymentHistory;
+    }
 
-        //@t0-validate this below condition is incorrect , please verify.
-        if (_amount <= 3) revert Amount_Not_To_Be_Bigger_Than_3();
+    function checkForAdmin(address _user) public view returns (bool admin_) {
+        bool admin = false;
+        for (uint256 ii = 0; ii < administrators.length; ii++) {
+            if (administrators[ii] == _user) {
+                admin = true;
+            }
+        }
+        return admin;
+    }
 
-        balances[msg.sender] -= _amount;
-        balances[_recipient] += _amount;
-        balances[msg.sender] += whitelist[msg.sender];
-        balances[_recipient] -= whitelist[msg.sender];
+    function balanceOf(address _user) external view returns (uint256 balance) {
+        return balances[_user];
+    }
 
-        // whiteListStruct[msg.sender] = ImportantStruct(0, 0, 0);
-        ImportantStruct storage newImportantStruct = whiteListStruct[
-            msg.sender
-        ];
-        newImportantStruct.valueA = _struct.valueA;
-        newImportantStruct.bigValue = _struct.bigValue;
-        newImportantStruct.valueB = _struct.valueB;
-        emit WhiteListTransfer(_recipient);
+    //Can it be removed or replaced with a public bol variable with true value.
+    function getTradingMode() external pure returns (bool mode) {
+        return true;
+    }
+
+    function getPayments(address _user)
+        external
+        view
+        returns (Payment[] memory payments_)
+    {
+        if (_user == address(0)) revert Zero_Address_Not_Valid();
+        return payments[_user];
     }
 }
