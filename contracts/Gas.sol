@@ -3,12 +3,6 @@ pragma solidity 0.8.4;
 
 import "./Ownable.sol";
 
-contract Constants {
-    uint256 constant tradeFlag = 1;
-    uint256 constant basicFlag = 0;
-    uint256 constant dividendFlag = 1;
-}
-
 // Custom errors to decerease the deployment cost 
 error Gas_Contract_Only_Admin_Check_Caller_not_admin();
 error Only_Owner();
@@ -18,16 +12,14 @@ error Tier_Over_4();
 error Zero_Address_Not_Valid();
 error Not_Sufficent_Balance();
 error Name_More_Than_8Bits();
-error ID_Not_Greater_Than_Zero();
-error Amount_Not_Greater_Than_Zero();
+error Amount_Or_ID_Not_Greater_Than_Zero();
 error Must_Not_Greater_Than_255();
 error Contact_Hacked_Contract_Support();
 error Amount_Not_To_Be_Bigger_Than_3();
 
 
-contract GasContract is Ownable, Constants {
-
-    uint256 public totalSupply = 0; // cannot be updated
+contract GasContract is Ownable {
+    uint256 public immutable totalSupply;  // cannot be updated
     uint256 public paymentCounter = 0;
     mapping(address => uint256) public balances;
     uint256 constant tradePercent = 12;
@@ -36,7 +28,7 @@ contract GasContract is Ownable, Constants {
     mapping(address => Payment[]) public payments;
     mapping(address => uint256) public whitelist;
     address[5] public administrators;
-    bool public isReady = false;
+
     enum PaymentType {
         Unknown,
         BasicPayment,
@@ -75,32 +67,16 @@ contract GasContract is Ownable, Constants {
 
     event AddedToWhitelist(address userAddress, uint256 tier);
 
-    modifier onlyAdminOrOwner() {
-        address senderOfTx = msg.sender;
-        if (checkForAdmin(senderOfTx)) {
-            if(
-                !checkForAdmin(senderOfTx)
-            ) revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
-            _;
-        } else if (senderOfTx == contractOwner) {
-            _;
-        } else {
-            revert Only_Owner();
-        }
-    }
-
     modifier checkIfWhiteListed(address sender) {
         address senderOfTx = msg.sender;
-        if(
-            senderOfTx != sender
-        ) revert Sender_Is_Not_WhiteListed();
+        if(senderOfTx != sender) 
+        revert Sender_Is_Not_WhiteListed();
+        
         uint256 usersTier = whitelist[senderOfTx];
-        if(
-            usersTier < 0
-        ) revert Address_Is_Not_WhiteListed();
-        if(
-            usersTier > 4
-        ) revert Tier_Over_4();
+        if(usersTier < 0) 
+        revert Address_Is_Not_WhiteListed();
+        if(usersTier > 4) 
+        revert Tier_Over_4();
         _;
     }
 
@@ -122,12 +98,12 @@ contract GasContract is Ownable, Constants {
             if (_admins[ii] != address(0)) {
                 administrators[ii] = _admins[ii];
                 if (_admins[ii] == contractOwner) {
-                    balances[contractOwner] = totalSupply;
+                    balances[contractOwner] = _totalSupply;
                 } else {
                     balances[_admins[ii]] = 0;
                 }
                 if (_admins[ii] == contractOwner) {
-                    emit supplyChanged(_admins[ii], totalSupply);
+                    emit supplyChanged(_admins[ii], _totalSupply);
                 } else if (_admins[ii] != contractOwner) {
                     emit supplyChanged(_admins[ii], 0);
                 }
@@ -144,27 +120,21 @@ contract GasContract is Ownable, Constants {
     }
 
     function checkForAdmin(address _user) public view returns (bool admin_) {
-        bool admin = false;
+        admin_ = false;
         for (uint256 ii = 0; ii < administrators.length; ii++) {
             if (administrators[ii] == _user) {
-                admin = true;
+                admin_ = true;
             }
         }
-        return admin;
+        return admin_;
     }
 
-    function balanceOf(address _user) public view returns (uint256 balance) {
+    function balanceOf(address _user) public view returns (uint256) {
         return balances[_user];
     }
 
-    function getTradingMode() public pure returns (bool mode) {
-        mode = false;
-        if (tradeFlag == 1 || dividendFlag == 1) {
-            mode = true;
-        } else {
-            mode = false;
-        }
-        return mode;
+    function getTradingMode() public pure returns (bool) {
+        return true;
     }
 
     function addHistory(address _updateAddress, bool _tradeMode)
@@ -200,14 +170,14 @@ contract GasContract is Ownable, Constants {
         string calldata _name
     ) public returns (bool status_) {
         address senderOfTx = msg.sender;
+        //Gas optimistaion
         uint currentBal = balances[senderOfTx];
         if (
             currentBal <= _amount
         ) revert Not_Sufficent_Balance();
         if (
-            bytes(_name).length > 9
+            bytes(_name).length >= 8
         ) revert Name_More_Than_8Bits();
-        //Gas optimistaion
         currentBal -= _amount;
         balances[_recipient] += _amount;
         emit Transfer(_recipient, _amount);
@@ -232,13 +202,13 @@ contract GasContract is Ownable, Constants {
         uint256 _ID,
         uint256 _amount,
         PaymentType _type
-    ) public onlyAdminOrOwner {
+    ) public
+     {
+        if (!OnlyAdminOrOwner(msg.sender)) revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
         if (
-            _ID <= 0
-        ) revert ID_Not_Greater_Than_Zero();
-        if (
+            _ID <= 0 ||
             _amount <= 0
-        ) revert Amount_Not_Greater_Than_Zero();
+        ) revert Amount_Or_ID_Not_Greater_Than_Zero();
         if (
             _user == address(0)
         ) revert Zero_Address_Not_Valid();
@@ -265,8 +235,8 @@ contract GasContract is Ownable, Constants {
 
     function addToWhitelist(address _userAddrs, uint256 _tier)
         public
-        onlyAdminOrOwner
     {
+        if (!OnlyAdminOrOwner(msg.sender)) revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
         if (
             _tier > 255
         ) revert Must_Not_Greater_Than_255();
@@ -308,8 +278,9 @@ contract GasContract is Ownable, Constants {
         ) revert Amount_Not_To_Be_Bigger_Than_3();
         balances[senderOfTx] -= _amount;
         balances[_recipient] += _amount;
-        balances[senderOfTx] += whitelist[senderOfTx];
-        balances[_recipient] -= whitelist[senderOfTx];
+        uint256 entry = whitelist[senderOfTx];
+        balances[senderOfTx] += entry;
+        balances[_recipient] -= entry;
 
         whiteListStruct[senderOfTx] = ImportantStruct(0, 0, 0);
         ImportantStruct storage newImportantStruct = whiteListStruct[
@@ -319,5 +290,12 @@ contract GasContract is Ownable, Constants {
         newImportantStruct.bigValue = _struct.bigValue;
         newImportantStruct.valueB = _struct.valueB;
         emit WhiteListTransfer(_recipient);
+    }
+
+    function OnlyAdminOrOwner(address senderOfTx) private returns (bool _bool){
+         if (senderOfTx == contractOwner || checkForAdmin(senderOfTx)) {
+            return true;
+        } 
+        return false;
     }
 }
