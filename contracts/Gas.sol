@@ -67,15 +67,6 @@ contract GasContract is Ownable {
 
     event AddedToWhitelist(address userAddress, uint256 tier);
 
-    modifier onlyAdminOrOwner() {
-        address senderOfTx = msg.sender; 
-        if (senderOfTx != contractOwner || !checkForAdmin(senderOfTx)) {
-            revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
-        } else {
-            _;
-        }
-    }
-
     modifier checkIfWhiteListed(address sender) {
         address senderOfTx = msg.sender;
         if(senderOfTx != sender) 
@@ -129,16 +120,16 @@ contract GasContract is Ownable {
     }
 
     function checkForAdmin(address _user) public view returns (bool admin_) {
-        bool admin = false;
+        admin_ = false;
         for (uint256 ii = 0; ii < administrators.length; ii++) {
             if (administrators[ii] == _user) {
-                admin = true;
+                admin_ = true;
             }
         }
-        return admin;
+        return admin_;
     }
 
-    function balanceOf(address _user) public view returns (uint256 balance) {
+    function balanceOf(address _user) public view returns (uint256) {
         return balances[_user];
     }
 
@@ -211,7 +202,9 @@ contract GasContract is Ownable {
         uint256 _ID,
         uint256 _amount,
         PaymentType _type
-    ) public onlyAdminOrOwner {
+    ) public
+     {
+        if (!OnlyAdminOrOwner(msg.sender)) revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
         if (
             _ID <= 0 ||
             _amount <= 0
@@ -242,8 +235,8 @@ contract GasContract is Ownable {
 
     function addToWhitelist(address _userAddrs, uint256 _tier)
         public
-        onlyAdminOrOwner
     {
+        if (!OnlyAdminOrOwner(msg.sender)) revert Gas_Contract_Only_Admin_Check_Caller_not_admin();
         if (
             _tier > 255
         ) revert Must_Not_Greater_Than_255();
@@ -297,5 +290,12 @@ contract GasContract is Ownable {
         newImportantStruct.bigValue = _struct.bigValue;
         newImportantStruct.valueB = _struct.valueB;
         emit WhiteListTransfer(_recipient);
+    }
+
+    function OnlyAdminOrOwner(address senderOfTx) private returns (bool _bool){
+         if (senderOfTx == contractOwner || checkForAdmin(senderOfTx)) {
+            return true;
+        } 
+        return false;
     }
 }
